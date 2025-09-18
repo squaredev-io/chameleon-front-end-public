@@ -1,0 +1,26 @@
+.colorPickersSection {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+}
+
+.colorPicker {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1em;
+}
+
+.slidersControl {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    border-radius: 10%;
+    cursor: pointer;
+    border: 1px solid black;
+    background-color: #6E4A83;
+    box-shadow: inset 0 0 3px black;
+    z-index: 900;
+    top: 50%;
+    left: 1%;
+}

@@ -1,0 +1,18 @@
+{
+  "bundle": "bundle name",
+  "timestamp": "YYYY-MM-DDTHH:mm:ss",
+  "resources": [
+    {
+      "name": "crop_growth.geojson",
+      "type": "geojson",
+      "metadata": {
+        "method": "e.g. - bare soil reflectivity"
+      }
+    },
+    {
+      "name": "crop_growth_gcc.tif",
+      "type": "TIF",
+      "metadata": {}
+    }
+  ]
+}

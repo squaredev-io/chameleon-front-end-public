@@ -1,0 +1,16 @@
+.dialogContent {
+    padding-top: 8px;
+    padding-bottom: 24px;
+}
+
+.radioOption {
+    margin-bottom: 8px;
+}
+
+.dialogActions {
+    padding: 16px 24px;
+}
+
+.okButton {
+    font-weight: 500;
+}

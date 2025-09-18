@@ -1,0 +1,537 @@
+"use client";
+
+import React, { forwardRef, useEffect, useRef, useState } from "react";
+import MultiRangeSliderComponentStyles from "./MultiRangeSliderComponent.module.css";
+
+type Props = {
+  id?: string;
+  min?: number | string;
+  max?: number | string;
+  step?: number | string;
+  minValue?: number | string;
+  startingMinValue?: number | string;
+  maxValue?: number | string;
+  startingMaxValue?: number | string;
+  baseClassName?: string;
+  className?: string;
+  disabled?: boolean;
+  canMinMaxValueSame?: boolean;
+  style?: React.CSSProperties;
+  ruler?: boolean | string;
+  label?: boolean | string;
+  subSteps?: boolean | string;
+  stepOnly?: boolean | string;
+  preventWheel?: boolean | string;
+  labels?: string[];
+  minCaption?: string;
+  maxCaption?: string;
+  barLeftColor?: string;
+  barRightColor?: string;
+  barInnerColor?: string;
+  thumbLeftColor?: string;
+  thumbRightColor?: string;
+  onInput?: (e: ChangeResult) => void;
+  onChange?: (e: ChangeResult) => void;
+};
+
+export type ChangeResult = {
+  min: number;
+  max: number;
+  minValue: number;
+  maxValue: number;
+};
+
+let _wheelTimeout: number | null = null;
+let _triggerTimeout: number | null = null;
+
+const MultiRangeSliderComponent = (props: Props, ref: React.ForwardedRef<HTMLDivElement>): JSX.Element => {
+  let ruler = props.ruler === undefined || props.ruler === null ? true : props.ruler;
+  let label = props.label === undefined || props.label === null ? true : props.label;
+  let subSteps = props.subSteps === undefined || props.subSteps === null ? false : props.subSteps;
+  let stepOnly = props.stepOnly === undefined || props.stepOnly === null ? false : props.stepOnly;
+  let preventWheel = props.preventWheel === undefined || props.preventWheel === null ? false : props.preventWheel;
+  // @ts-ignore
+  let refBar = useRef<HTMLDivElement>(null);
+  let min = +(props.min || 0);
+  let max = +(props.max || 100);
+  let step = Math.abs(+(props.step || 5));
+  let fixed = 0;
+  let disabled = !!props.disabled;
+  let stepValue = props.canMinMaxValueSame ? 0 : step;
+
+  let stepCount = Math.floor((+max - +min) / +step);
+  let labels: string[] = props.labels || [];
+  if (labels.length === 0) {
+    labels = [];
+    labels.push(min.toString());
+    labels.push(max.toString());
+  } else {
+    stepCount = labels.length - 1;
+  }
+
+  if (typeof label === "string") {
+    label = label === "true";
+  }
+  if (typeof ruler === "string") {
+    ruler = ruler === "true";
+  }
+  if (typeof preventWheel === "string") {
+    preventWheel = preventWheel === "true";
+  }
+  if (step.toString().includes(".")) {
+    fixed = 2;
+  }
+  let _minValue = props.minValue;
+  if (_minValue === null || _minValue === undefined) {
+    _minValue = 25;
+  }
+  _minValue = +_minValue;
+  let _maxValue = props.maxValue;
+  if (_maxValue === null || _maxValue === undefined) {
+    _maxValue = 75;
+  }
+  _maxValue = +_maxValue;
+
+  if (_minValue < min) {
+    _minValue = min;
+  }
+  if (_minValue > max) {
+    _minValue = max;
+  }
+  if (_maxValue < _minValue) {
+    _maxValue = +_minValue + +step;
+  }
+  if (_maxValue > max) {
+    _maxValue = max;
+  }
+  if (_maxValue < min) {
+    _maxValue = min;
+  }
+
+  const [minValue, set_minValue] = useState(+_minValue);
+  const [maxValue, set_maxValue] = useState(+_maxValue);
+  const [barMin, set_barMin] = useState(((minValue - min) / (max - min)) * 100);
+  const [barMax, set_barMax] = useState(((max - maxValue) / (max - min)) * 100);
+  const [minCaption, setMinCaption] = useState<string>("");
+  const [maxCaption, setMaxCaption] = useState<string>("");
+  const [isChange, setIsChange] = useState(true);
+
+  const onBarLeftClick = (e: React.MouseEvent) => {
+    if (disabled) return;
+    let _minValue = minValue - step;
+    if (_minValue < min) {
+      _minValue = min;
+    }
+    set_minValue(_minValue);
+  };
+  const onInputMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    let _minValue = parseFloat(e.target.value);
+    if (_minValue > maxValue - stepValue) {
+      _minValue = maxValue - stepValue;
+    }
+    set_minValue(_minValue);
+    setIsChange(true);
+  };
+
+  const onLeftThumbMousedown: React.MouseEventHandler = (e: React.MouseEvent) => {
+    if (disabled) return;
+    let startX = e.clientX;
+    let thumb = e.target as HTMLDivElement;
+    let bar = thumb.parentNode as HTMLDivElement;
+    let barBox = bar.getBoundingClientRect();
+    let barValue = minValue;
+    setIsChange(false);
+    let onLeftThumbMousemove: { (e: MouseEvent): void } = (e: MouseEvent) => {
+      let clientX = e.clientX;
+      let dx = clientX - startX;
+      let per = dx / barBox.width;
+      let val = barValue + (max - min) * per;
+      if (stepOnly) {
+        val = Math.round(val / step) * step;
+      }
+      val = parseFloat(val.toFixed(fixed));
+      if (val < min) {
+        val = min;
+      } else if (val > maxValue - stepValue) {
+        val = maxValue - stepValue;
+      }
+      set_minValue(val);
+    };
+    let onLeftThumbMouseup: { (e: MouseEvent): void } = (e: MouseEvent) => {
+      setIsChange(true);
+      document.removeEventListener("mousemove", onLeftThumbMousemove);
+      document.removeEventListener("mouseup", onLeftThumbMouseup);
+    };
+    document.addEventListener("mousemove", onLeftThumbMousemove);
+    document.addEventListener("mouseup", onLeftThumbMouseup);
+  };
+
+  const onLeftThumbTouchStart = (e: React.TouchEvent) => {
+    if (disabled) return;
+    let startX = e.touches[0].clientX;
+    let thumb = e.target as HTMLDivElement;
+    let bar = thumb.parentNode as HTMLDivElement;
+    let barBox = bar.getBoundingClientRect();
+    let barValue = minValue;
+    setIsChange(false);
+    let onLeftThumbToucheMove: { (e: TouchEvent): void } = (e: TouchEvent) => {
+      let clientX = e.touches[0].clientX;
+      let dx = clientX - startX;
+      let per = dx / barBox.width;
+      let val = barValue + (max - min) * per;
+      if (stepOnly) {
+        val = Math.round(val / step) * step;
+      }
+      val = parseFloat(val.toFixed(fixed));
+      if (val < min) {
+        val = min;
+      } else if (val > maxValue - stepValue) {
+        val = maxValue - stepValue;
+      }
+      set_minValue(val);
+    };
+    let onLeftThumbTouchEnd: { (e: TouchEvent): void } = (e: TouchEvent) => {
+      setIsChange(true);
+      document.removeEventListener("touchmove", onLeftThumbToucheMove);
+      document.removeEventListener("touchend", onLeftThumbTouchEnd);
+    };
+
+    document.addEventListener("touchmove", onLeftThumbToucheMove);
+    document.addEventListener("touchend", onLeftThumbTouchEnd);
+  };
+
+  const onInnerBarLeftClick = (e: React.MouseEvent) => {
+    if (disabled) return;
+    let _minValue = minValue + step;
+    if (_minValue > maxValue - stepValue) {
+      _minValue = maxValue - stepValue;
+    }
+    set_minValue(_minValue);
+  };
+
+  const onInnerBarRightClick = (e: React.MouseEvent) => {
+    if (disabled) return;
+    let _maxValue = maxValue - step;
+    if (_maxValue < minValue + stepValue) {
+      _maxValue = minValue + stepValue;
+    }
+    set_maxValue(_maxValue);
+  };
+
+  const onInputMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    let _maxValue = parseFloat(e.target.value);
+    if (_maxValue < minValue + stepValue) {
+      _maxValue = minValue + stepValue;
+    }
+    set_maxValue(_maxValue);
+    setIsChange(true);
+  };
+
+  const onRightThumbMousedown: React.MouseEventHandler = (e: React.MouseEvent) => {
+    if (disabled) return;
+    let startX = e.clientX;
+    let thumb = e.target as HTMLDivElement;
+    let bar = thumb.parentNode as HTMLDivElement;
+    let barBox = bar.getBoundingClientRect();
+    let barValue = maxValue;
+    setIsChange(false);
+    let onRightThumbMousemove: { (e: MouseEvent): void } = (e: MouseEvent) => {
+      let clientX = e.clientX;
+      let dx = clientX - startX;
+      let per = dx / barBox.width;
+      let val = barValue + (max - min) * per;
+      if (stepOnly) {
+        val = Math.round(val / step) * step;
+      }
+      val = parseFloat(val.toFixed(fixed));
+      if (val < minValue + stepValue) {
+        val = minValue + stepValue;
+      } else if (val > max) {
+        val = max;
+      }
+      set_maxValue(val);
+    };
+    let onRightThumbMouseup: { (e: MouseEvent): void } = (e: MouseEvent) => {
+      setIsChange(true);
+      document.removeEventListener("mousemove", onRightThumbMousemove);
+      document.removeEventListener("mouseup", onRightThumbMouseup);
+    };
+    document.addEventListener("mousemove", onRightThumbMousemove);
+    document.addEventListener("mouseup", onRightThumbMouseup);
+  };
+
+  const onRightThumbTouchStart = (e: React.TouchEvent) => {
+    if (disabled) return;
+    let startX = e.touches[0].clientX;
+    let thumb = e.target as HTMLDivElement;
+    let bar = thumb.parentNode as HTMLDivElement;
+    let barBox = bar.getBoundingClientRect();
+    let barValue = maxValue;
+    setIsChange(false);
+    let onRightThumbTouchMove: { (e: TouchEvent): void } = (e: TouchEvent) => {
+      let clientX = e.touches[0].clientX;
+      let dx = clientX - startX;
+      let per = dx / barBox.width;
+      let val = barValue + (max - min) * per;
+      if (stepOnly) {
+        val = Math.round(val / step) * step;
+      }
+      val = parseFloat(val.toFixed(fixed));
+      if (val < minValue + stepValue) {
+        val = minValue + stepValue;
+      } else if (val > max) {
+        val = max;
+      }
+      set_maxValue(val);
+    };
+    let onRightThumbTouchEnd: { (e: TouchEvent): void } = (e: TouchEvent) => {
+      setIsChange(true);
+      document.removeEventListener("touchmove", onRightThumbTouchMove);
+      document.removeEventListener("touchend", onRightThumbTouchEnd);
+    };
+    document.addEventListener("touchmove", onRightThumbTouchMove);
+    document.addEventListener("touchend", onRightThumbTouchEnd);
+  };
+
+  const onBarRightClick = (e: React.MouseEvent) => {
+    if (disabled) return;
+    let _maxValue = maxValue + step;
+    if (_maxValue > max) {
+      _maxValue = max;
+    }
+    set_maxValue(_maxValue);
+  };
+
+  const onMouseWheel = (e: React.WheelEvent) => {
+    if (disabled) return;
+    if (preventWheel === true) {
+      return;
+    }
+    if (!e.shiftKey && !e.ctrlKey) {
+      return;
+    }
+    let val = (max - min) / 100;
+    if (val > 1) {
+      val = 1;
+    }
+    if (e.deltaY < 0) {
+      val = -val;
+    }
+
+    let _minValue = minValue;
+    let _maxValue = maxValue;
+    if (e.shiftKey && e.ctrlKey) {
+      if (_minValue + val >= min && _maxValue + val <= max) {
+        _minValue = _minValue + val;
+        _maxValue = _maxValue + val;
+      }
+    } else if (e.ctrlKey) {
+      val = _maxValue + val;
+      if (val < _minValue + stepValue) {
+        val = _minValue + stepValue;
+      } else if (val > max) {
+        val = max;
+      }
+      _maxValue = val;
+    } else if (e.shiftKey) {
+      val = _minValue + val;
+      if (val < min) {
+        val = min;
+      } else if (val > _maxValue - stepValue) {
+        val = _maxValue - stepValue;
+      }
+      _minValue = val;
+    }
+    setIsChange(false);
+    set_maxValue(_maxValue);
+    set_minValue(_minValue);
+    if (typeof window !== "undefined") {
+      _wheelTimeout && window?.clearTimeout(_wheelTimeout);
+      _wheelTimeout = window?.setTimeout(() => {
+        setIsChange(true);
+      }, 100);
+    }
+  };
+
+  useEffect(() => {
+    if (refBar && refBar.current) {
+      let bar = refBar.current as HTMLDivElement;
+      let p_bar = bar.parentNode as HTMLDivElement;
+      p_bar.addEventListener("wheel", (e) => {
+        if (!e.shiftKey && !e.ctrlKey) {
+          return;
+        }
+        e.preventDefault();
+      });
+    }
+  }, [refBar]);
+
+  useEffect(() => {
+    if (maxValue < minValue) {
+      throw new Error("maxValue is less than minValue");
+    }
+    const triggerChange = () => {
+      let result: ChangeResult = { min, max, minValue, maxValue };
+      isChange && props.onChange && props.onChange(result);
+      props.onInput && props.onInput(result);
+    };
+    setMinCaption(props.minCaption || minValue.toFixed(fixed));
+    setMaxCaption(props.maxCaption || maxValue.toFixed(fixed));
+    let _barMin = ((minValue - min) / (max - min)) * 100;
+    set_barMin(_barMin);
+    let _barMax = ((max - maxValue) / (max - min)) * 100;
+    set_barMax(_barMax);
+    if (typeof window !== "undefined") {
+      _triggerTimeout && window?.clearTimeout(_triggerTimeout);
+      _triggerTimeout = window?.setTimeout(triggerChange, 20);
+    }
+  }, [minValue, maxValue, min, max, fixed, props, isChange]);
+
+  useEffect(() => {
+    let _minValue = props.minValue;
+    if (_minValue === null || _minValue === undefined) {
+      _minValue =
+        typeof props.startingMinValue === "number" && !isNaN(props.startingMinValue) ? props.startingMinValue : 25;
+    }
+    _minValue = +_minValue;
+
+    if (_minValue < min) {
+      _minValue = min;
+    }
+    if (_minValue > max) {
+      _minValue = max;
+    }
+    setIsChange(false);
+    set_minValue(+_minValue);
+  }, [props.minValue, min, max]);
+
+  useEffect(() => {
+    let _maxValue = props.maxValue;
+    if (_maxValue === null || _maxValue === undefined) {
+      _maxValue = (props.startingMaxValue as number) || 75;
+    }
+    _maxValue = +_maxValue;
+
+    if (_maxValue > max) {
+      _maxValue = max;
+    }
+    if (_maxValue < min) {
+      _maxValue = min;
+    }
+    setIsChange(false);
+    set_maxValue(+_maxValue);
+  }, [props.maxValue, min, max, step]);
+
+  return (
+    <div
+      ref={ref}
+      id={props.id}
+      className={`${props.baseClassName || MultiRangeSliderComponentStyles.multiRangeSlider} ${props.className || ""} ${disabled ? MultiRangeSliderComponentStyles.disabled : ""}`}
+      style={props.style}
+      onWheel={onMouseWheel}
+    >
+      <div
+        className={MultiRangeSliderComponentStyles.bar}
+        ref={refBar}
+      >
+        <div
+          className={MultiRangeSliderComponentStyles.barLeft}
+          style={{ width: barMin + "%", backgroundColor: props.barLeftColor }}
+          onClick={onBarLeftClick}
+        />
+        <input
+          placeholder="min-value"
+          className={MultiRangeSliderComponentStyles.inputTypeRange}
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={minValue}
+          onInput={onInputMinChange}
+        />
+        <div
+          className={`${MultiRangeSliderComponentStyles.thumb} ${MultiRangeSliderComponentStyles.thumbLeft}`}
+          style={{ backgroundColor: props.thumbLeftColor }}
+          onMouseDown={onLeftThumbMousedown}
+          onTouchStart={onLeftThumbTouchStart}
+        >
+          <div className={MultiRangeSliderComponentStyles.caption}>
+            <span>{minCaption}</span>
+          </div>
+        </div>
+        <div
+          className={MultiRangeSliderComponentStyles.barInner}
+          style={{ backgroundColor: props.barInnerColor }}
+        >
+          <div
+            className={MultiRangeSliderComponentStyles.barInnerLeft}
+            onClick={onInnerBarLeftClick}
+          />
+          <div
+            className={MultiRangeSliderComponentStyles.barInnerRight}
+            onClick={onInnerBarRightClick}
+          />
+        </div>
+        <input
+          placeholder="max-value"
+          className={MultiRangeSliderComponentStyles.inputTypeRange}
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={maxValue}
+          onInput={onInputMaxChange}
+        />
+        <div
+          className={`${MultiRangeSliderComponentStyles.thumb} ${MultiRangeSliderComponentStyles.thumbRight}`}
+          style={{ backgroundColor: props.thumbRightColor }}
+          onMouseDown={onRightThumbMousedown}
+          onTouchStart={onRightThumbTouchStart}
+        >
+          <div className={MultiRangeSliderComponentStyles.caption}>
+            <span>{maxCaption}</span>
+          </div>
+        </div>
+        <div
+          className={MultiRangeSliderComponentStyles.barRight}
+          style={{ width: barMax + "%", backgroundColor: props.barRightColor }}
+          onClick={onBarRightClick}
+        />
+      </div>
+      {ruler && (
+        <div className={MultiRangeSliderComponentStyles.ruler}>
+          {[...Array(stepCount)].map((e, i) => (
+            <div
+              key={i}
+              className={MultiRangeSliderComponentStyles.rulerRule}
+            >
+              {subSteps &&
+                [...Array(10)].map((e, n) => (
+                  <div
+                    key={n}
+                    className={MultiRangeSliderComponentStyles.rulerSubRule}
+                  />
+                ))}
+            </div>
+          ))}
+        </div>
+      )}
+      {labels && (
+        <div className={MultiRangeSliderComponentStyles.labels}>
+          {labels.map((label) => (
+            <div
+              key={label.toString()}
+              className={MultiRangeSliderComponentStyles.label}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default forwardRef<HTMLDivElement, Props>(MultiRangeSliderComponent);
